@@ -193,6 +193,7 @@ class Common(object):
         elif Nl > 0:
             self.Nl = Nl
             # self.Nl = 5
+            # self.Nl = 3
 
         self.Nst = 3  # number of stochastic terms
 

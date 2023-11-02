@@ -6,6 +6,7 @@ import time
 from scipy.special import loggamma
 from scipy.misc import derivative
 from abc import ABC
+from scipy.fftpack import dst
 from scipy.stats import linregress
 
 # from . common import Common, co
@@ -43,109 +44,176 @@ from .matching import Matching
 class Correlator(object):
     def __init__(self, config_dict=None, load_engines=True):
 
+        # self.cosmo_catalog = {
+        #     "P11": Option(
+        #         "P11", (list, np.ndarray), description="Linear matter power spectrum in [Mpc/h]^3", default=None
+        #     ),
+        #     "k11": Option(
+        #         "k11", (list, np.ndarray), description="k-array in [h/Mpc] on which P11 is evaluated", default=None
+        #     ),
+        #     "D": Option(
+        #         "D",
+        #         (float, list, np.ndarray),
+        #         description="Scale independent growth function. To specify if 'skycut' > 1 or 'with_nonequal_time' / 'with_redshift_bin' is True.",
+        #         default=None,
+        #     ),
+        #     "f": Option(
+        #         "f",
+        #         (float, list, np.ndarray),
+        #         description="Scale independent growth rate (for RSD). Automatically set to 0 for 'output': 'm__'.",
+        #         default=None,
+        #     ),
+        #     "bias": Option(
+        #         "bias",
+        #         (dict, list, np.ndarray),
+        #         description="EFT parameters in dict = \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'cr2', 'ce0', 'ce1', 'ce2' \}.",
+        #         default=None,
+        #     ),
+        #     "Omega0_m": Option(
+        #         "Omega0_m",
+        #         float,
+        #         description="Fractional matter abundance at present time. To specify for exact time dependence.",
+        #         default=None,
+        #     ),
+        #     "w0_fld": Option(
+        #         "w0_fld",
+        #         float,
+        #         description="Dark energy equation of state parameter. To specify for exact time dependence if varied (otherwise w0 = -1).",
+        #         default=None,
+        #     ),
+        #     "z": Option(
+        #         "z",
+        #         (float, list, np.ndarray),
+        #         description="Effective redshift(s). Should match the number of skycuts. To specify for exact time dependence.",
+        #         default=None,
+        #     ),
+        #     "DA": Option(
+        #         "DA",
+        #         (float, list, np.ndarray),
+        #         description="Angular distance times H_0. To specify if 'with_AP' is True.",
+        #         default=None,
+        #     ),
+        #     "H": Option(
+        #         "H",
+        #         (float, list, np.ndarray),
+        #         description="Hubble parameter by H_0. To specify if 'with_AP' is True.",
+        #         default=None,
+        #     ),
+        #     "Dz": Option(
+        #         "Dz",
+        #         (list, np.ndarray),
+        #         description="Scale independent growth function over redshift bin. To specify if 'with_redshift_bin' is True.",
+        #         default=None,
+        #     ),
+        #     "fz": Option(
+        #         "fz",
+        #         (list, np.ndarray),
+        #         description="Scale independent growth rate over redshift bin. To specify if 'with_redshift_bin' is True.",
+        #         default=None,
+        #     ),
+        #     "rz": Option(
+        #         "rz",
+        #         (list, np.ndarray),
+        #         description="Comoving distance in [Mpc/h] over redshift bin. To specify if 'with_redshift_bin' or if 'output':'w'.",
+        #         default=None,
+        #     ),
+        #     "D1": Option(
+        #         "D1",
+        #         float,
+        #         description="Scale independent growth function at redshift z1. To specify if 'with_nonequal_time' is True.",
+        #         default=None,
+        #     ),
+        #     "D2": Option(
+        #         "D2",
+        #         float,
+        #         description="Scale independent growth function at redshift z2. To specify if 'with_nonequal_time' is True.",
+        #         default=None,
+        #     ),
+        #     "f1": Option(
+        #         "f1",
+        #         float,
+        #         description="Scale independent growth rate at redshift z1. To specify if 'with_nonequal_time' is True.",
+        #         default=None,
+        #     ),
+        #     "f2": Option(
+        #         "f2",
+        #         float,
+        #         description="Scale independent growth rate at redshift z2. To specify if 'with_nonequal_time' is True.",
+        #         default=None,
+        #     ),
+        #     "EH": Option(
+        #         "EH",
+        #         dict,
+        #         description="Cosmological parameters for Eisenstein-Hu power spectrum. To specify if 'with_nnlo_counterterm' is True.",
+        #         default=None,
+        #     ),
+        #     "Psmooth": Option("Psmooth", (list, np.ndarray),
+        #         description="Smooth power spectrum. To specify if \'with_nnlo_counterterm\' is True.",
+        #         default=None) ,
+        #     "pk_lin_2": Option("pk_lin_2", (list, np.ndarray),
+        #         description="Alternative linear matter power spectrum in [Mpc/h]^3 replacing \'pk_lin\' in the internal loop integrals (and resummation)",
+        #         default=None) ,
+        # }
+        
         self.cosmo_catalog = {
-            "P11": Option(
-                "P11", (list, np.ndarray), description="Linear matter power spectrum in [Mpc/h]^3", default=None
-            ),
-            "k11": Option(
-                "k11", (list, np.ndarray), description="k-array in [h/Mpc] on which P11 is evaluated", default=None
-            ),
-            "D": Option(
-                "D",
-                (float, list, np.ndarray),
-                description="Scale independent growth function. To specify if 'skycut' > 1 or 'with_nonequal_time' / 'with_redshift_bin' is True.",
-                default=None,
-            ),
-            "f": Option(
-                "f",
-                (float, list, np.ndarray),
-                description="Scale independent growth rate (for RSD). Automatically set to 0 for 'output': 'm__'.",
-                default=None,
-            ),
-            "bias": Option(
-                "bias",
-                (dict, list, np.ndarray),
-                description="EFT parameters in dict = \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'cr2', 'ce0', 'ce1', 'ce2' \}.",
-                default=None,
-            ),
-            "Omega0_m": Option(
-                "Omega0_m",
-                float,
-                description="Fractional matter abundance at present time. To specify for exact time dependence.",
-                default=None,
-            ),
-            "w0_fld": Option(
-                "w0_fld",
-                float,
-                description="Dark energy equation of state parameter. To specify for exact time dependence if varied (otherwise w0 = -1).",
-                default=None,
-            ),
-            "z": Option(
-                "z",
-                (float, list, np.ndarray),
-                description="Effective redshift(s). Should match the number of skycuts. To specify for exact time dependence.",
-                default=None,
-            ),
-            "DA": Option(
-                "DA",
-                (float, list, np.ndarray),
-                description="Angular distance times H_0. To specify if 'with_AP' is True.",
-                default=None,
-            ),
-            "H": Option(
-                "H",
-                (float, list, np.ndarray),
-                description="Hubble parameter by H_0. To specify if 'with_AP' is True.",
-                default=None,
-            ),
-            "Dz": Option(
-                "Dz",
-                (list, np.ndarray),
-                description="Scale independent growth function over redshift bin. To specify if 'with_redshift_bin' is True.",
-                default=None,
-            ),
-            "fz": Option(
-                "fz",
-                (list, np.ndarray),
-                description="Scale independent growth rate over redshift bin. To specify if 'with_redshift_bin' is True.",
-                default=None,
-            ),
-            "rz": Option(
-                "rz",
-                (list, np.ndarray),
-                description="Comoving distance in [Mpc/h] over redshift bin. To specify if 'with_redshift_bin' or if 'output':'w'.",
-                default=None,
-            ),
-            "D1": Option(
-                "D1",
-                float,
-                description="Scale independent growth function at redshift z1. To specify if 'with_nonequal_time' is True.",
-                default=None,
-            ),
-            "D2": Option(
-                "D2",
-                float,
-                description="Scale independent growth function at redshift z2. To specify if 'with_nonequal_time' is True.",
-                default=None,
-            ),
-            "f1": Option(
-                "f1",
-                float,
-                description="Scale independent growth rate at redshift z1. To specify if 'with_nonequal_time' is True.",
-                default=None,
-            ),
-            "f2": Option(
-                "f2",
-                float,
-                description="Scale independent growth rate at redshift z2. To specify if 'with_nonequal_time' is True.",
-                default=None,
-            ),
-            "EH": Option(
-                "EH",
-                dict,
-                description="Cosmological parameters for Eisenstein-Hu power spectrum. To specify if 'with_nnlo_counterterm' is True.",
-                default=None,
-            ),
+            "pk_lin": Option("pk_lin", (list, np.ndarray),
+                description="Linear matter power spectrum in [Mpc/h]^3",
+                default=None) ,
+            "kk": Option("kk", (list, np.ndarray),
+                description="k-array in [h/Mpc] on which pk_lin is evaluated",
+                default=None) ,
+            "f": Option("f", float,
+                description="Scale independent growth rate (for RSD). Automatically set to 0 for \'output\': \'m__\'.",
+                default=None) ,
+            "bias": Option("bias", dict,
+                description="EFT parameters in dictionary to specify as \
+                    (\'eft_basis\': \'eftoflss\') \{ \'b1\'(a), \'b2\'(a), \'b3\'(a), \'b4\'(a), \'cct\', \'cr1\'(b), \'cr2\'(b), \'ce0\'(d), \'ce1\'(d), \'ce2\'(d)] \} \
+                    (\'eft_basis\': \'westcoast\') \{ \'b1\'(a), \'c2\'(a), \'c4\'(a), \'b3\'(a), \'cct\', \'cr1\'(b), \'cr2\'(b), \'ce0\'(d), \'ce1\'(d), \'ce2\'(d)] \} \
+                    (\'eft_basis\': \'eastcoast\') \{ \'b1\'(a), \'b2\'(a), \'bG2\'(a), \'bgamma3\'(a), \'c0\', \'c2\'(b), \'c4\'(c), \'ce0\'(d), \'ce1\'(d), \'ce2\'(d)] \} \
+                    if (a): \'b\' in \'output\'; (b): \'multipole\'>=2; (d): \'with_stoch\' is True ",
+                default=None) ,
+            "H": Option("H", float,
+                description="Hubble parameter by H_0. To specify if \'with_ap\' is True.",
+                default=None) ,
+            "DA": Option("DA", float,
+                description="Angular distance times H_0. To specify if \'with_ap\' is True.",
+                default=None) ,
+            "z": Option("z", float,
+                description="Effective redshift(s). To specify if \'with_time\' is False or \'with_exact_time\' is True.",
+                default=None) ,
+            "D": Option("D", float,
+                description="Scale independent growth function. To specify if \'with_time\' is False, e.g., \'with_nonequal_time\' or \'with_redshift_bin\' is True.",
+                default=None) ,
+            "A": Option("A", float,
+                description="Amplitude rescaling, i.e, A = A_s / A_s^\{fid\}. Default: A=1. If \'with_time\' is False, can in some ways be used as a fast parameter.",
+                default=None) ,
+            "Omega0_m": Option("Omega0_m", float,
+                description="Fractional matter abundance at present time. To specify if \'with_exact_time\' is True.",
+                default=None) ,
+            "w0_fld": Option("w0_fld", float,
+                description="Dark energy equation of state parameter. To specify in presence of dark energy if \'with_exact_time\' is True (otherwise w0 = -1).",
+                default=None) ,
+            "Dz": Option("Dz", (list, np.ndarray),
+                description="Scale independent growth function over redshift bin. To specify if \'with_redshift_bin\' is True.",
+                default=None) ,
+            "fz": Option("fz", (list, np.ndarray),
+                description="Scale independent growth rate over redshift bin. To specify if \'with_redshift_bin\' is True.",
+                default=None) ,
+            "rz": Option("rz", (list, np.ndarray),
+                description="Comoving distance in [Mpc/h] over redshift bin. To specify if \'with_redshift_bin\' or if \'output\':\'w\'.",
+                default=None) ,
+            "D1": Option("D1", float,
+                description="Scale independent growth function at redshift z1. To specify if \'with_nonequal_time\' is True.",
+                default=None) ,
+            "D2": Option("D2", float,
+                description="Scale independent growth function at redshift z2. To specify if \'with_nonequal_time\' is True.",
+                default=None) ,
+            "f1": Option("f1", float,
+                description="Scale independent growth rate at redshift z1. To specify if \'with_nonequal_time\' is True.",
+                default=None) ,
+            "f2": Option("f2", float,
+                description="Scale independent growth rate at redshift z2. To specify if \'with_nonequal_time\' is True.",
+                default=None) ,
             "Psmooth": Option("Psmooth", (list, np.ndarray),
                 description="Smooth power spectrum. To specify if \'with_nnlo_counterterm\' is True.",
                 default=None) ,
@@ -376,13 +444,20 @@ class Correlator(object):
         # Loading PyBird engines
         self.__load_engines(load_engines=load_engines)
 
-    def compute(self, cosmo_dict, module=None, Templatefit = False, corr_convert = False):
+    def compute(self, cosmo_dict, module=None, Templatefit = False, corr_convert = False, cosmo_module=None, cosmo_engine=None, correlator_engine=None, do_core=True, do_survey_specific=True):
 
-        cosmo_dict_local = cosmo_dict.copy()
+        # cosmo_dict_local = cosmo_dict.copy()
         
 
-        if module == "class":
-            cosmo_dict_class = self.setcosmo(cosmo_dict, module="class")
+        # if module == "class":
+        #     cosmo_dict_class = self.setcosmo(cosmo_dict, module="class")
+        #     cosmo_dict_local.update(cosmo_dict_class)
+        
+        if cosmo_dict: cosmo_dict_local = cosmo_dict.copy()
+        elif cosmo_module and cosmo_engine: cosmo_dict_local = {}
+        else: raise Exception('provide cosmo_dict or CLASSy engine with cosmo_module=\'class\' ')
+        if cosmo_module: # works only with classy now
+            cosmo_dict_class = self.set_cosmo(cosmo_dict, module=cosmo_module, engine=cosmo_engine)
             cosmo_dict_local.update(cosmo_dict_class)
 
         self.__read_cosmo(cosmo_dict_local)
@@ -837,100 +912,163 @@ class Correlator(object):
             
             return C11l, Cloopl, Cctl, Cstl
 
-    def get(self, bias=None):
+    # def get(self, bias=None):
         
-        # for p in marg_gauss_eft_parameters_list:
-        #     if p not in self.gauss_eft_parameters_list:
-        #         raise Exception("The parameter %s specified in getmarg() is not an available Gaussian EFT parameter to marginalize. Check your options. " % p)
+    #     # for p in marg_gauss_eft_parameters_list:
+    #     #     if p not in self.gauss_eft_parameters_list:
+    #     #         raise Exception("The parameter %s specified in getmarg() is not an available Gaussian EFT parameter to marginalize. Check your options. " % p)
 
-        if self.config["skycut"] == 1:
-            if not self.config["with_bias"]:
-                self.__is_bias_conflict(bias)
-                if "Pk" in self.config["output"]:
-                    self.bird.setreducePslb(self.bias)
-                elif "Cf" in self.config["output"]:
-                    self.bird.setreduceCflb(self.bias)
-            if "Pk" in self.config["output"]:
-                return self.bird.fullPs
-            elif "Cf" in self.config["output"]:
-                return self.bird.fullCf
+    #     if self.config["skycut"] == 1:
+    #         if not self.config["with_bias"]:
+    #             self.__is_bias_conflict(bias)
+    #             if "Pk" in self.config["output"]:
+    #                 self.bird.setreducePslb(self.bias)
+    #             elif "Cf" in self.config["output"]:
+    #                 self.bird.setreduceCflb(self.bias)
+    #         if "Pk" in self.config["output"]:
+    #             return self.bird.fullPs
+    #         elif "Cf" in self.config["output"]:
+    #             return self.bird.fullCf
 
-        elif self.config["skycut"] > 1:
-            if not isinstance(bias, (list, np.ndarray)) or len(bias) != self.config["skycut"]:
-                raise Exception("Please specify bias (in a list of dicts) for each corresponding skycuts. ")
-            for i in range(self.config["skycut"]):
-                self.__is_bias_conflict(bias[i])
-                if "Cf" in self.config["output"]:
-                    self.birds[i].setreduceCflb(self.bias)
-                elif "Pk" in self.config["output"]:
-                    self.birds[i].setreducePslb(self.bias)
-            if "Pk" in self.config["output"]:
-                return [self.birds[i].fullPs for i in range(self.config["skycut"])]
-            elif "Cf" in self.config["output"]:
-                return [self.birds[i].fullCf for i in range(self.config["skycut"])]
+    #     elif self.config["skycut"] > 1:
+    #         if not isinstance(bias, (list, np.ndarray)) or len(bias) != self.config["skycut"]:
+    #             raise Exception("Please specify bias (in a list of dicts) for each corresponding skycuts. ")
+    #         for i in range(self.config["skycut"]):
+    #             self.__is_bias_conflict(bias[i])
+    #             if "Cf" in self.config["output"]:
+    #                 self.birds[i].setreduceCflb(self.bias)
+    #             elif "Pk" in self.config["output"]:
+    #                 self.birds[i].setreducePslb(self.bias)
+    #         if "Pk" in self.config["output"]:
+    #             return [self.birds[i].fullPs for i in range(self.config["skycut"])]
+    #         elif "Cf" in self.config["output"]:
+    #             return [self.birds[i].fullCf for i in range(self.config["skycut"])]
 
-    def getmarg(self, bias, model=1):
-        def marg(loop, ct, b1, f, Pst=None, bq=0):
+    # def getmarg(self, bias, model=1):
+    #     def marg(loop, ct, b1, f, Pst=None, bq=0):
 
-            if "m" in self.config["output"]:
-                return np.array([ct[0].reshape(-1) / self.config["km"] ** 2])
+    #         if "m" in self.config["output"]:
+    #             return np.array([ct[0].reshape(-1) / self.config["km"] ** 2])
 
-            elif "b" in self.config["output"]:
+    #         elif "b" in self.config["output"]:
 
-                if loop.ndim is 3:
-                    loop = np.swapaxes(loop, axis1=0, axis2=1)
-                    ct = np.swapaxes(ct, axis1=0, axis2=1)
-                    if Pst is not None:
-                        Pst = np.swapaxes(Pst, axis1=0, axis2=1)
+    #             if loop.ndim is 3:
+    #                 loop = np.swapaxes(loop, axis1=0, axis2=1)
+    #                 ct = np.swapaxes(ct, axis1=0, axis2=1)
+    #                 if Pst is not None:
+    #                     Pst = np.swapaxes(Pst, axis1=0, axis2=1)
 
-                if self.co.Nloop is 12:
-                    Pb3 = loop[3] + b1 * loop[7]  # config["with_time"] = True
-                elif self.co.Nloop is 18:
-                    Pb3 = (
-                        loop[3] + b1 * loop[7] + bq * loop[16]
-                    )  # config["with_time"] = True, config["with_tidal_alignments"] = True
-                elif self.co.Nloop is 22:
-                    Pb3 = f * loop[8] + b1 * loop[16]  # config["with_time"] = False, config["with_exact_time"] = False
-                elif self.co.Nloop is 35:
-                    Pb3 = f * loop[18] + b1 * loop[29]  # config["with_time"] = False, config["with_exact_time"] = True
+    #             if self.co.Nloop is 12:
+    #                 Pb3 = loop[3] + b1 * loop[7]  # config["with_time"] = True
+    #             elif self.co.Nloop is 18:
+    #                 Pb3 = (
+    #                     loop[3] + b1 * loop[7] + bq * loop[16]
+    #                 )  # config["with_time"] = True, config["with_tidal_alignments"] = True
+    #             elif self.co.Nloop is 22:
+    #                 Pb3 = f * loop[8] + b1 * loop[16]  # config["with_time"] = False, config["with_exact_time"] = False
+    #             elif self.co.Nloop is 35:
+    #                 Pb3 = f * loop[18] + b1 * loop[29]  # config["with_time"] = False, config["with_exact_time"] = True
 
-                m = np.array(
-                    [Pb3.reshape(-1), 2 * (f * ct[0 + 3] + b1 * ct[0]).reshape(-1) / self.config["km"] ** 2]
-                )  # b3, cct
+    #             m = np.array(
+    #                 [Pb3.reshape(-1), 2 * (f * ct[0 + 3] + b1 * ct[0]).reshape(-1) / self.config["km"] ** 2]
+    #             )  # b3, cct
 
-                if self.config["multipole"] >= 2:
-                    m = np.vstack([m, 2 * (f * ct[1 + 3] + b1 * ct[1]).reshape(-1) / self.config["km"] ** 2])  # cr1
-                if self.config["multipole"] >= 3:
-                    m = np.vstack([m, 2 * (f * ct[2 + 3] + b1 * ct[2]).reshape(-1) / self.config["km"] ** 2])  # cr2
+    #             if self.config["multipole"] >= 2:
+    #                 m = np.vstack([m, 2 * (f * ct[1 + 3] + b1 * ct[1]).reshape(-1) / self.config["km"] ** 2])  # cr1
+    #             if self.config["multipole"] >= 3:
+    #                 m = np.vstack([m, 2 * (f * ct[2 + 3] + b1 * ct[2]).reshape(-1) / self.config["km"] ** 2])  # cr2
 
-                if self.config["with_stoch"]:
-                    if model <= 4:
-                        m = np.vstack([m, Pst[2].reshape(-1)])  # k^2 quad
-                    if model == 1:
-                        m = np.vstack([m, Pst[0].reshape(-1)])  # k^0 mono
-                    if model == 3:
-                        m = np.vstack([m, Pst[1].reshape(-1)])  # k^2 mono
-                    if model == 4:
-                        m = np.vstack([m, Pst[1].reshape(-1), Pst[0].reshape(-1)])  # k^2 mono, k^0 mono
+    #             if self.config["with_stoch"]:
+    #                 if model <= 4:
+    #                     m = np.vstack([m, Pst[2].reshape(-1)])  # k^2 quad
+    #                 if model == 1:
+    #                     m = np.vstack([m, Pst[0].reshape(-1)])  # k^0 mono
+    #                 if model == 3:
+    #                     m = np.vstack([m, Pst[1].reshape(-1)])  # k^2 mono
+    #                 if model == 4:
+    #                     m = np.vstack([m, Pst[1].reshape(-1), Pst[0].reshape(-1)])  # k^2 mono, k^0 mono
 
-            return m
+    #         return m
+
+    #     def marg_from_bird(bird, bias_local):
+    #         self.__is_bias_conflict(bias_local)
+            
+    #         if self.config["with_tidal_alignments"]: bq = self.bias["bq"]
+    #         else: bq = 0.
+            
+    #         if "Pk" in self.config["output"]:
+    #             return marg(bird.Ploopl, bird.Pctl, self.bias["b1"], bird.f, Pst=bird.Pstl, bq=bq)
+    #         elif "Cf" in self.config["output"]:
+    #             return marg(bird.Cloopl, bird.Cctl, self.bias["b1"], bird.f, Pst=bird.Cstl, bq=bq)
+
+    #     if self.config["skycut"] == 1:
+    #         return marg_from_bird(self.bird, bias)
+    #     elif self.config["skycut"] > 1:
+    #         return [marg_from_bird(bird_i, bias_i) for (bird_i, bias_i) in zip(self.birds, bias)]
+
+    
+    def get(self, bias=None, what="full"):
+
+        if not self.config["with_bias"]:
+            self.__is_bias_conflict(bias)
+            if "Pk" in self.config["output"]: self.bird.setreducePslb(self.bias, what=what)
+            elif "Cf" in self.config["output"]: self.bird.setreduceCflb(self.bias, what=what)
+        if "Pk" in self.config["output"]: return self.bird.fullPs
+        elif "Cf" in self.config["output"]: return self.bird.fullCf
+
+    def getmarg(self, bias, marg_gauss_eft_parameters_list):
+
+        for p in marg_gauss_eft_parameters_list:
+            if p not in self.gauss_eft_parameters_list:
+                raise Exception("The parameter %s specified in getmarg() is not an available Gaussian EFT parameter to marginalize. Check your options. " % p)
+
+        def marg(loopl, ctl, b1, f, stl=None, nnlol=None, bq=0):
+
+            # concatenating multipoles: loopl.shape = (Nl, Nloop, Nk) -> loop.shape = (Nloop, Nl * Nk)
+            loop = np.swapaxes(loopl, axis1=0, axis2=1).reshape(loopl.shape[1],-1)
+            ct = np.swapaxes(ctl, axis1=0, axis2=1).reshape(ctl.shape[1],-1)
+            if stl is not None: st = np.swapaxes(stl, axis1=0, axis2=1).reshape(stl.shape[1],-1)
+            if nnlol is not None: nnlo = np.swapaxes(nnlol, axis1=0, axis2=1).reshape(nnlol.shape[1],-1)
+
+            pg = np.empty(shape=(len(marg_gauss_eft_parameters_list), loop.shape[1]))
+            for i, p in enumerate(marg_gauss_eft_parameters_list):
+                if p in ['b3', 'bGamma3']:
+                    if self.co.Nloop == 12: pg[i] = loop[3] + b1 * loop[7]                          # config["with_time"] = True
+                    elif self.co.Nloop == 18: pg[i] = loop[3] + b1 * loop[7] + bq * loop[16]        # config["with_time"] = True, config["with_tidal_alignments"] = True
+                    elif self.co.Nloop == 22: pg[i] = f * loop[8] + b1 * loop[16]                   # config["with_time"] = False, config["with_exact_time"] = False
+                    elif self.co.Nloop == 35: pg[i] = f * loop[18] + b1 * loop[29]                  # config["with_time"] = False, config["with_exact_time"] = True
+                    if p == 'bGamma3': pg[i] *= 6. # b3 = b1 + 15. * bG2 + 6. * bGamma3 : config["eft_basis"] = 'eastcoast'
+                # counterterm : config["eft_basis"] = 'eftoflss' or 'westcoast'
+                elif p == 'cct': pg[i] = 2 * (f * ct[0+3] + b1 * ct[0]) / self.config["km"]**2 # ~ 2 (b1 + f * mu^2) k^2/km^2 pk_lin
+                elif p == 'cr1': pg[i] = 2 * (f * ct[1+3] + b1 * ct[1]) / self.config["kr"]**2 # ~ 2 (b1 mu^2 + f * mu^4) k^2/kr^2 pk_lin
+                elif p == 'cr2': pg[i] = 2 * (f * ct[2+3] + b1 * ct[2]) / self.config["kr"]**2 # ~ 2 (b1 mu^4 + f * mu^6) k^2/kr^2 pk_lin
+                # counterterm : config["eft_basis"] = 'eastcoast'                       # (2.15) and (2.23) of 2004.10607
+                elif p in ['c0', 'c2', 'c4']:
+                    ct0, ct2, ct4 = - 2 * ct[0], - 2 * f * ct[1], - 2 * f**2 * ct[2]    # - 2 ct0 k^2 pk_lin , - 2 ct2 f mu^2 k^2 pk_lin , - 2 ct4 f^2 mu^4 k^2 pk_lin
+                    if p == 'c0':   pg[i] = ct0
+                    elif p == 'c2': pg[i] = - f/3. * ct0 + ct2
+                    elif p == 'c4': pg[i] = 3/35. * f**2 * ct0 - 6/7. * f * ct2 + ct4
+                # stochastic term
+                elif p == 'ce0': pg[i] = st[0] / self.config["nd"] # k^0 / nd mono
+                elif p == 'ce1': pg[i] = st[1] / self.config["km"]**2 / self.config["nd"] # k^2 / km^2 / nd mono
+                elif p == 'ce2': pg[i] = st[2] / self.config["km"]**2 / self.config["nd"] # k^2 / km^2 / nd quad
+                # nnlo term: config["eft_basis"] = 'eftoflss' or 'westcoast'
+                elif p == 'cr4': pg[i] = 0.25 * b1**2 * nnlo[0] / self.config["kr"]**4 # ~ 1/4 b1^2 k^4/kr^4 mu^4 pk_lin
+                elif p == 'cr6': pg[i] = 0.25 * b1 * nnlo[1] / self.config["kr"]**4    # ~ 1/4 b1 k^4/kr^4 mu^6 pk_lin
+                # nnlo term: config["eft_basis"] = 'eastcoast'
+                elif p == 'ct': pg[i] = - f**4 * (b1**2 * nnlo[0] + 2. * b1 * f * nnlo[1] + f**2 * nnlo[2]) # ~ k^4 mu^4 pk_lin
+
+            return pg
 
         def marg_from_bird(bird, bias_local):
             self.__is_bias_conflict(bias_local)
-            
             if self.config["with_tidal_alignments"]: bq = self.bias["bq"]
             else: bq = 0.
-            
-            if "Pk" in self.config["output"]:
-                return marg(bird.Ploopl, bird.Pctl, self.bias["b1"], bird.f, Pst=bird.Pstl, bq=bq)
-            elif "Cf" in self.config["output"]:
-                return marg(bird.Cloopl, bird.Cctl, self.bias["b1"], bird.f, Pst=bird.Cstl, bq=bq)
+            if "Pk" in self.config["output"]: return marg(bird.Ploopl, bird.Pctl, self.bias["b1"], bird.f, stl=bird.Pstl, nnlol=bird.Pnnlol, bq=bq)
+            elif "Cf" in self.config["output"]: return marg(bird.Cloopl, bird.Cctl, self.bias["b1"], bird.f, stl=bird.Cstl, nnlol=bird.Cnnlol, bq=bq)
 
-        if self.config["skycut"] == 1:
-            return marg_from_bird(self.bird, bias)
-        elif self.config["skycut"] > 1:
-            return [marg_from_bird(bird_i, bias_i) for (bird_i, bias_i) in zip(self.birds, bias)]
-
+        return marg_from_bird(self.bird, bias)
+    
     def getnnlo(self, bias):
 
         if self.config["skycut"] == 1:
@@ -1102,344 +1240,378 @@ class Correlator(object):
         # Translating the catalog to a dict
         self.cosmo = translate_catalog_to_dict(self.cosmo_catalog)
 
+    # def __is_cosmo_conflict(self):
+
+    #     if self.cosmo["k11"] is None or self.cosmo["P11"] is None:
+    #         raise Exception("Please provide a linear matter power spectrum 'P11' and the corresponding 'k11'. ")
+
+    #     if len(self.cosmo["k11"]) != len(self.cosmo["P11"]):
+    #         # print(len(self.cosmo["k11"]), len(self.cosmo["P11"]))
+    #         raise Exception(
+    #             "Please provide a linear matter power spectrum 'P11' and the corresponding 'k11' of same length."
+    #         )
+
+    #     if self.cosmo["k11"][0] > 1e-4 or self.cosmo["k11"][-1] < 1.0:
+    #         raise Exception(
+    #             "Please provide a linear matter spectrum 'P11' and the corresponding 'k11' with min(k11) < 1e-4 and max(k11) > 1."
+    #         )
+
+    #     if self.config["skycut"] > 1:
+    #         if self.cosmo["D"] is None:
+    #             raise Exception("You asked multi skycuts. Please specify the growth function 'D'. ")
+    #         elif len(self.cosmo["D"]) is not self.config["skycut"]:
+    #             raise Exception("Please specify (in a list) as many growth functions 'D' as the corresponding skycuts.")
+
+    #     if self.config["multipole"] == 0:
+    #         self.cosmo["f"] = 0.0
+    #     elif not self.config["with_redshift_bin"]:
+    #         if self.cosmo["f"] is None:
+    #             raise Exception("Please specify the growth rate 'f'.")
+    #         if self.config["skycut"] == 1:
+    #             if not isinstance(self.cosmo["f"], float):
+    #                 raise Exception("Please provide a single growth rate 'f'.")
+    #         elif len(self.cosmo["f"]) != self.config["skycut"]:
+    #             raise Exception("Please specify (in a list) as many 'f' as the corresponding skycuts.")
+
+    #     if self.config["wedge"] > 0:
+    #         if self.config["wedges_bounds"] is not None:
+    #             if (
+    #                 len(self.config["wedges_bounds"]) != self.config["wedge"] + 1
+    #                 or self.config["wedges_bounds"][0] != 0
+    #                 or self.config["wedges_bounds"][-1] != 1
+    #             ):
+    #                 raise Exception(
+    #                     "If specifying 'wedges_bounds', specify them in a list as: [0, a_1, ..., a_{n-1}, 1], where n: number of wedges"
+    #                 )
+
+    #     if self.config["with_bias"]:
+    #         self.__is_bias_conflict()
+
+    #     if self.config["with_AP"]:
+    #         if self.cosmo["DA"] is None or self.cosmo["H"] is None:
+    #             raise Exception("You asked to apply the AP effect. Please specify 'DA' and 'H'. ")
+
+    #         if self.config["skycut"] == 1:
+    #             if not isinstance(self.cosmo["DA"], float) and not isinstance(self.cosmo["H"], float):
+    #                 raise Exception("Please provide a single pair of 'DA' and 'H'.")
+    #         elif len(self.cosmo["DA"]) != self.config["skycut"] or len(self.cosmo["H"]) != self.config["skycut"]:
+    #             raise Exception("Please specify (in lists) as many 'DA' and 'H' as the corresponding skycuts.")
+
+    #     if self.config["with_redshift_bin"]:
+    #         if self.cosmo["Dz"] is None or self.cosmo["fz"] is None:
+    #             raise Exception("You asked to account the galaxy counts distribution. Please specify 'Dz' and 'fz'. ")
+
+    #         if self.config["skycut"] == 1:
+    #             if len(self.cosmo["Dz"]) != len(self.config["zz"]) or len(self.cosmo["fz"]) != len(self.config["zz"]):
+    #                 raise Exception("Please specify 'Dz' and 'fz' with same length as 'zz'. ")
+    #         elif len(self.cosmo["Dz"]) != self.config["skycut"] or len(self.cosmo["fz"]) != self.config["skycut"]:
+    #             raise Exception("Please specify (in lists) as many 'Dz' and 'fz' as the corresponding skycuts.")
+
+    #     if self.config["with_nonequal_time"]:
+    #         if (
+    #             self.cosmo["D1"] is None
+    #             or self.cosmo["D2"] is None
+    #             or self.cosmo["f1"] is None
+    #             or self.cosmo["f2"] is None
+    #         ):
+    #             raise Exception("You asked nonequal time correlator. Pleas specify: 'D1', 'D2', 'f1', 'f2'.  ")
+
+    # # def __is_bias_conflict(self, bias=None):  # rewrite this...
+
+    # #     ###raise Exception("Input error in \'%s\'; input configs: %s. Check Correlator.info() in any doubt." % ())
+
+    # #     if bias is not None:
+    # #         self.cosmo["bias"] = bias
+
+    # #     if self.cosmo["bias"] is None:
+    # #         raise Exception("Please specify 'bias'. ")
+    # #     if isinstance(self.cosmo["bias"], (list, np.ndarray)):
+    # #         self.cosmo["bias"] = self.cosmo["bias"][0]
+    # #     if not isinstance(self.cosmo["bias"], dict):
+    # #         raise Exception("Please specify bias in a dict. ")
+
+    # #     if "bm" in self.config["output"]:  # redshift halo - real-space matter
+    # #         if not self.config["with_stoch"]:
+    # #             if self.config["multipole"] == 0:
+    # #                 if len(self.cosmo["bias"]) is not 5:
+    # #                     raise Exception("Please specify a dict of 5 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct' \}. ")
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": 0.0,
+    # #                         "cr2": 0.0,
+    # #                         "ce0": 0.0,
+    # #                         "ce1": 0.0,
+    # #                         "ce2": 0.0,
+    # #                     }
+    # #             elif self.config["multipole"] == 2 or self.config["multipole"] == 3:
+    # #                 if len(self.cosmo["bias"]) is not 6:
+    # #                     raise Exception(
+    # #                         "Please specify a dict of 6 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1' \} "
+    # #                     )
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": self.cosmo["bias"]["cr1"],
+    # #                         "cr2": 0.0,
+    # #                         "ce0": 0.0,
+    # #                         "ce1": 0.0,
+    # #                         "ce2": 0.0,
+    # #                     }
+
+    # #     # if "bm" in self.config["output"]: # redshift halo - redshift matter
+    # #     #     if not self.config["with_stoch"]:
+    # #     #         if self.config["multipole"] == 0:
+    # #     #             if len(self.cosmo["bias"]) is not 6: raise Exception("Please specify a dict of 6 biases: \{ \'b1\', \'b2\', \'b3\', \'b4\', \'cct\' + matter counterterm: \'dct\' \}. ")
+    # #     #             else: self.bias = { "b1": self.cosmo["bias"]["b1"], "b2": self.cosmo["bias"]["b2"], "b3": self.cosmo["bias"]["b3"], "b4": self.cosmo["bias"]["b4"], "cct": self.cosmo["bias"]["cct"], "cr1": 0., "cr2": 0., "ce0": 0., "ce1": 0., "ce2": 0., "dct": self.cosmo["bias"]["dct"], "dr1": 0., "dr2": 0. }
+    # #     #         elif self.config["multipole"] == 2:
+    # #     #             if len(self.cosmo["bias"]) is not 8: raise Exception("Please specify a dict of 8 biases: \{ \'b1\', \'b2\', \'b3\', \'b4\', \'cct\', \'cr1\' + matter counterterms: \'dct\', \'dr1\' \}. ")
+    # #     #             else: self.bias = { "b1": self.cosmo["bias"]["b1"], "b2": self.cosmo["bias"]["b2"], "b3": self.cosmo["bias"]["b3"], "b4": self.cosmo["bias"]["b4"], "cct": self.cosmo["bias"]["cct"], "cr1": self.cosmo["bias"]["cr1"], "cr2": 0., "ce0": 0., "ce1": 0., "ce2": 0., "dct": self.cosmo["bias"]["dct"], "dr1": self.cosmo["bias"]["dr1"], "dr2": 0. }
+    # #     #         elif self.config["multipole"] == 3:
+    # #     #             if len(self.cosmo["bias"]) is not 10: raise Exception("Please specify a dict of 10 biases: \{ \'b1\', \'b2\', \'b3\', \'b4\', \'cct\', \'cr1\', \'cr2\' + matter counterterms: \'dct\', \'dr1\', \'dr2\' \}. ")
+    # #     #             else: self.bias = { "b1": self.cosmo["bias"]["b1"], "b2": self.cosmo["bias"]["b2"], "b3": self.cosmo["bias"]["b3"], "b4": self.cosmo["bias"]["b4"], "cct": self.cosmo["bias"]["cct"], "cr1": self.cosmo["bias"]["cr1"], "cr2": self.cosmo["bias"]["cr2"], "ce0": 0., "ce1": 0., "ce2": 0., "dct": self.cosmo["bias"]["dct"], "dr1": self.cosmo["bias"]["dr1"], "dr2": self.cosmo["bias"]["dr2"] }
+    # #     #     else:
+    # #     #         pass # to code up
+
+    # #     elif "m" in self.config["output"]:
+    # #         if self.config["multipole"] == 0:
+    # #             if len(self.cosmo["bias"]) is not 1:
+    # #                 raise Exception("Please specify a dict of 1 bias: \{ 'cct' \}. ")
+    # #             else:
+    # #                 self.bias = {
+    # #                     "b1": 1.0,
+    # #                     "b2": 1.0,
+    # #                     "b3": 1.0,
+    # #                     "b4": 0.0,
+    # #                     "cct": self.cosmo["bias"]["cct"],
+    # #                     "cr1": 0.0,
+    # #                     "cr2": 0.0,
+    # #                     "ce0": 0.0,
+    # #                     "ce1": 0.0,
+    # #                     "ce2": 0.0,
+    # #                 }
+    # #         elif self.config["multipole"] == 2:
+    # #             if len(self.cosmo["bias"]) is not 2:
+    # #                 raise Exception("Please specify a dict of 2 biases: \{ 'cct', 'cr1' \}. ")
+    # #             else:
+    # #                 self.bias = {
+    # #                     "b1": 1.0,
+    # #                     "b2": 1.0,
+    # #                     "b3": 1.0,
+    # #                     "b4": 0.0,
+    # #                     "cct": self.cosmo["bias"]["cct"],
+    # #                     "cr1": self.cosmo["bias"]["cr1"],
+    # #                     "cr2": 0.0,
+    # #                     "ce0": 0.0,
+    # #                     "ce1": 0.0,
+    # #                     "ce2": 0.0,
+    # #                 }
+    # #         elif self.config["multipole"] == 3:
+    # #             if len(self.cosmo["bias"]) is not 3:
+    # #                 raise Exception("Please specify a dict of 3 biases: \{ 'cct', 'cr1', 'cr2' \}. ")
+    # #             else:
+    # #                 self.bias = {
+    # #                     "b1": 1.0,
+    # #                     "b2": 1.0,
+    # #                     "b3": 1.0,
+    # #                     "b4": 0.0,
+    # #                     "cct": self.cosmo["bias"]["cct"],
+    # #                     "cr1": self.cosmo["bias"]["cr1"],
+    # #                     "cr2": self.cosmo["bias"]["cr2"],
+    # #                     "ce0": 0.0,
+    # #                     "ce1": 0.0,
+    # #                     "ce2": 0.0,
+    # #                 }
+
+    # #     else:
+
+    # #         Nextra = 0
+    # #         if self.config["with_nnlo_counterterm"]:
+    # #             Nextra += self.config["multipole"]
+    # #         if self.config["with_nnlo_higher_derivative"]:
+    # #             Nextra += self.config["multipole"]
+    # #         if self.config["with_tidal_alignments"]:
+    # #             Nextra += 1
+
+    # #         if not self.config["with_stoch"]:
+    # #             if self.config["multipole"] == 0:
+    # #                 if len(self.cosmo["bias"]) is not 5 + Nextra:
+    # #                     raise Exception("Please specify a dict of 5 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct' \}. ")
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": 0.0,
+    # #                         "cr2": 0.0,
+    # #                         "ce0": 0.0,
+    # #                         "ce1": 0.0,
+    # #                         "ce2": 0.0,
+    # #                     }
+    # #             elif self.config["multipole"] == 2:
+    # #                 if len(self.cosmo["bias"]) is not 6 + Nextra:
+    # #                     raise Exception(
+    # #                         "Please specify a dict of 6 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1' \}. "
+    # #                     )
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": self.cosmo["bias"]["cr1"],
+    # #                         "cr2": 0.0,
+    # #                         "ce0": 0.0,
+    # #                         "ce1": 0.0,
+    # #                         "ce2": 0.0,
+    # #                     }
+    # #             elif self.config["multipole"] == 3:
+    # #                 if len(self.cosmo["bias"]) is not 7 + Nextra:
+    # #                     raise Exception(
+    # #                         "Please specify a dict of 7 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'cr2' \}. "
+    # #                     )
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": self.cosmo["bias"]["cr1"],
+    # #                         "cr2": self.cosmo["bias"]["cr2"],
+    # #                         "ce0": 0.0,
+    # #                         "ce1": 0.0,
+    # #                         "ce2": 0.0,
+    # #                     }
+    # #         else:
+    # #             if self.config["multipole"] == 0:
+    # #                 if len(self.cosmo["bias"]) is not 6 + Nextra:
+    # #                     raise Exception(
+    # #                         "Please specify a dict of 6 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'ce0' \}. "
+    # #                     )
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": 0.0,
+    # #                         "cr2": 0.0,
+    # #                         "ce0": self.cosmo["bias"]["ce0"],
+    # #                         "ce1": 0.0,
+    # #                         "ce2": 0.0,
+    # #                     }
+    # #             elif self.config["multipole"] == 2:
+    # #                 if len(self.cosmo["bias"]) is not 9 + Nextra:
+    # #                     raise Exception(
+    # #                         "Please specify a dict of 9 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'ce0', 'ce1', 'ce2'  \}. "
+    # #                     )
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": self.cosmo["bias"]["cr1"],
+    # #                         "cr2": 0.0,
+    # #                         "ce0": self.cosmo["bias"]["ce0"],
+    # #                         "ce1": self.cosmo["bias"]["ce1"],
+    # #                         "ce2": self.cosmo["bias"]["ce2"],
+    # #                     }
+    # #             elif self.config["multipole"] == 3:
+    # #                 if len(self.cosmo["bias"]) is not 10 + Nextra:
+    # #                     raise Exception(
+    # #                         "Please specify a dict of 10 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'cr2', 'ce0', 'ce1', 'ce2' \}. "
+    # #                     )
+    # #                 else:
+    # #                     self.bias = {
+    # #                         "b1": self.cosmo["bias"]["b1"],
+    # #                         "b2": self.cosmo["bias"]["b2"],
+    # #                         "b3": self.cosmo["bias"]["b3"],
+    # #                         "b4": self.cosmo["bias"]["b4"],
+    # #                         "cct": self.cosmo["bias"]["cct"],
+    # #                         "cr1": self.cosmo["bias"]["cr1"],
+    # #                         "cr2": self.cosmo["bias"]["cr2"],
+    # #                         "ce0": self.cosmo["bias"]["ce0"],
+    # #                         "ce1": self.cosmo["bias"]["ce1"],
+    # #                         "ce2": self.cosmo["bias"]["ce2"],
+    # #                     }
+
+    # #         if self.config["with_nnlo_counterterm"]:
+    # #             try:
+    # #                 self.bias["cnnlo_l0"] = self.cosmo["bias"]["cnnlo_l0"]
+    # #                 self.bias["cnnlo_l2"] = self.cosmo["bias"]["cnnlo_l2"]
+    # #                 if self.config["multipole"] == 3:
+    # #                     self.bias["cnnlo_l4"] = self.cosmo["bias"]["cnnlo_l4"]
+    # #             except:
+    # #                 raise Exception(
+    # #                     "Please specify the next-to-next-to-leading counterterm coefficients 'cnnlo_l0', 'cnnlo_l2', ...  "
+    # #                 )
+
+    # #         if self.config["with_nnlo_higher_derivative"]:
+    # #             try:
+    # #                 self.bias["bnnlo_l0"] = self.cosmo["bias"]["bnnlo_l0"]
+    # #                 self.bias["bnnlo_l2"] = self.cosmo["bias"]["bnnlo_l2"]
+    # #                 if self.config["multipole"] == 3:
+    # #                     self.bias["bnnlo_l4"] = self.cosmo["bias"]["bnnlo_l4"]
+    # #             except:
+    # #                 raise Exception(
+    # #                     "Please specify the next-to-next-to-leading higher-derivative biases 'bnnlo_l0', 'bnnlo_l2', ...  "
+    # #                 )
+
+    # #         if self.config["with_tidal_alignments"]:
+    # #             try:
+    # #                 self.bias["bq"] = self.cosmo["bias"]["bq"]
+    # #             except:
+    # #                 raise Exception("Please specify the tidal alignments bias 'bq'.  ")
+    # #         else:
+    # #             self.bias["bq"] = 0.0  # enforced for marg
+    
     def __is_cosmo_conflict(self):
 
-        if self.cosmo["k11"] is None or self.cosmo["P11"] is None:
-            raise Exception("Please provide a linear matter power spectrum 'P11' and the corresponding 'k11'. ")
+        if self.config["with_bias"]: self.__is_bias_conflict()
+        
+        # print(self.cosmo)
 
-        if len(self.cosmo["k11"]) != len(self.cosmo["P11"]):
-            raise Exception(
-                "Please provide a linear matter power spectrum 'P11' and the corresponding 'k11' of same length."
-            )
+        if self.cosmo["kk"] is None or self.cosmo["pk_lin"] is None:
+            raise Exception("Please provide a linear matter power spectrum \'pk_lin\' and the corresponding \'kk\'. ")
 
-        if self.cosmo["k11"][0] > 1e-4 or self.cosmo["k11"][-1] < 1.0:
-            raise Exception(
-                "Please provide a linear matter spectrum 'P11' and the corresponding 'k11' with min(k11) < 1e-4 and max(k11) > 1."
-            )
+        if len(self.cosmo["kk"]) != len(self.cosmo["pk_lin"]):
+            raise Exception("Please provide a linear matter power spectrum \'pk_lin\' and the corresponding \'kk\' of same length.")
 
-        if self.config["skycut"] > 1:
-            if self.cosmo["D"] is None:
-                raise Exception("You asked multi skycuts. Please specify the growth function 'D'. ")
-            elif len(self.cosmo["D"]) is not self.config["skycut"]:
-                raise Exception("Please specify (in a list) as many growth functions 'D' as the corresponding skycuts.")
+        if self.cosmo["kk"][0] > 1e-4 or self.cosmo["kk"][-1] < 1.:
+            raise Exception("Please provide a linear matter spectrum \'pk_lin\' and the corresponding \'kk\' with min(kk) < 1e-4 and max(kk) > 1.")
 
-        if self.config["multipole"] == 0:
-            self.cosmo["f"] = 0.0
-        elif not self.config["with_redshift_bin"]:
-            if self.cosmo["f"] is None:
-                raise Exception("Please specify the growth rate 'f'.")
-            if self.config["skycut"] == 1:
-                if not isinstance(self.cosmo["f"], float):
-                    raise Exception("Please provide a single growth rate 'f'.")
-            elif len(self.cosmo["f"]) != self.config["skycut"]:
-                raise Exception("Please specify (in a list) as many 'f' as the corresponding skycuts.")
+        if self.config["multipole"] == 0: self.cosmo["f"] = 0.
+        elif not self.config["with_redshift_bin"] and self.cosmo["f"] is None:
+            raise Exception("Please specify the growth rate \'f\'.")
+        elif self.config["with_redshift_bin"] and (self.cosmo["Dz"] is None or self.cosmo["fz"] is None):
+            raise Exception("You asked to account the galaxy counts distribution. Please specify \'Dz\' and \'fz\'. ")
 
-        if self.config["wedge"] > 0:
-            if self.config["wedges_bounds"] is not None:
-                if (
-                    len(self.config["wedges_bounds"]) != self.config["wedge"] + 1
-                    or self.config["wedges_bounds"][0] != 0
-                    or self.config["wedges_bounds"][-1] != 1
-                ):
-                    raise Exception(
-                        "If specifying 'wedges_bounds', specify them in a list as: [0, a_1, ..., a_{n-1}, 1], where n: number of wedges"
-                    )
+        if not self.config["with_time"] and self.cosmo["D"] is None:
+            raise Exception("Please specify the growth factor \'D\'.")
 
-        if self.config["with_bias"]:
-            self.__is_bias_conflict()
+        if self.config["with_nonequal_time"] and (self.cosmo["D1"] is None or self.cosmo["D2"] is None or self.cosmo["f1"] is None or self.cosmo["f2"] is None):
+            raise Exception("You asked nonequal time correlator. Pleas specify: \'D1\', \'D2\', \'f1\', \'f2\'.  ")
 
-        if self.config["with_AP"]:
-            if self.cosmo["DA"] is None or self.cosmo["H"] is None:
-                raise Exception("You asked to apply the AP effect. Please specify 'DA' and 'H'. ")
+        if self.config["with_AP"] and (self.cosmo["H"] is None or self.cosmo["DA"] is None):
+            raise Exception("You asked to apply the AP effect. Please specify \'H\' and \'DA\'. ")
 
-            if self.config["skycut"] == 1:
-                if not isinstance(self.cosmo["DA"], float) and not isinstance(self.cosmo["H"], float):
-                    raise Exception("Please provide a single pair of 'DA' and 'H'.")
-            elif len(self.cosmo["DA"]) != self.config["skycut"] or len(self.cosmo["H"]) != self.config["skycut"]:
-                raise Exception("Please specify (in lists) as many 'DA' and 'H' as the corresponding skycuts.")
+        if not self.config["with_time"] and self.cosmo["A"]: self.cosmo["D"] *= self.cosmo["A"]**.5
 
-        if self.config["with_redshift_bin"]:
-            if self.cosmo["Dz"] is None or self.cosmo["fz"] is None:
-                raise Exception("You asked to account the galaxy counts distribution. Please specify 'Dz' and 'fz'. ")
-
-            if self.config["skycut"] == 1:
-                if len(self.cosmo["Dz"]) != len(self.config["zz"]) or len(self.cosmo["fz"]) != len(self.config["zz"]):
-                    raise Exception("Please specify 'Dz' and 'fz' with same length as 'zz'. ")
-            elif len(self.cosmo["Dz"]) != self.config["skycut"] or len(self.cosmo["fz"]) != self.config["skycut"]:
-                raise Exception("Please specify (in lists) as many 'Dz' and 'fz' as the corresponding skycuts.")
-
-        if self.config["with_nonequal_time"]:
-            if (
-                self.cosmo["D1"] is None
-                or self.cosmo["D2"] is None
-                or self.cosmo["f1"] is None
-                or self.cosmo["f2"] is None
-            ):
-                raise Exception("You asked nonequal time correlator. Pleas specify: 'D1', 'D2', 'f1', 'f2'.  ")
-
-    # def __is_bias_conflict(self, bias=None):  # rewrite this...
-
-    #     ###raise Exception("Input error in \'%s\'; input configs: %s. Check Correlator.info() in any doubt." % ())
-
-    #     if bias is not None:
-    #         self.cosmo["bias"] = bias
-
-    #     if self.cosmo["bias"] is None:
-    #         raise Exception("Please specify 'bias'. ")
-    #     if isinstance(self.cosmo["bias"], (list, np.ndarray)):
-    #         self.cosmo["bias"] = self.cosmo["bias"][0]
-    #     if not isinstance(self.cosmo["bias"], dict):
-    #         raise Exception("Please specify bias in a dict. ")
-
-    #     if "bm" in self.config["output"]:  # redshift halo - real-space matter
-    #         if not self.config["with_stoch"]:
-    #             if self.config["multipole"] == 0:
-    #                 if len(self.cosmo["bias"]) is not 5:
-    #                     raise Exception("Please specify a dict of 5 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct' \}. ")
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": 0.0,
-    #                         "cr2": 0.0,
-    #                         "ce0": 0.0,
-    #                         "ce1": 0.0,
-    #                         "ce2": 0.0,
-    #                     }
-    #             elif self.config["multipole"] == 2 or self.config["multipole"] == 3:
-    #                 if len(self.cosmo["bias"]) is not 6:
-    #                     raise Exception(
-    #                         "Please specify a dict of 6 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1' \} "
-    #                     )
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": self.cosmo["bias"]["cr1"],
-    #                         "cr2": 0.0,
-    #                         "ce0": 0.0,
-    #                         "ce1": 0.0,
-    #                         "ce2": 0.0,
-    #                     }
-
-    #     # if "bm" in self.config["output"]: # redshift halo - redshift matter
-    #     #     if not self.config["with_stoch"]:
-    #     #         if self.config["multipole"] == 0:
-    #     #             if len(self.cosmo["bias"]) is not 6: raise Exception("Please specify a dict of 6 biases: \{ \'b1\', \'b2\', \'b3\', \'b4\', \'cct\' + matter counterterm: \'dct\' \}. ")
-    #     #             else: self.bias = { "b1": self.cosmo["bias"]["b1"], "b2": self.cosmo["bias"]["b2"], "b3": self.cosmo["bias"]["b3"], "b4": self.cosmo["bias"]["b4"], "cct": self.cosmo["bias"]["cct"], "cr1": 0., "cr2": 0., "ce0": 0., "ce1": 0., "ce2": 0., "dct": self.cosmo["bias"]["dct"], "dr1": 0., "dr2": 0. }
-    #     #         elif self.config["multipole"] == 2:
-    #     #             if len(self.cosmo["bias"]) is not 8: raise Exception("Please specify a dict of 8 biases: \{ \'b1\', \'b2\', \'b3\', \'b4\', \'cct\', \'cr1\' + matter counterterms: \'dct\', \'dr1\' \}. ")
-    #     #             else: self.bias = { "b1": self.cosmo["bias"]["b1"], "b2": self.cosmo["bias"]["b2"], "b3": self.cosmo["bias"]["b3"], "b4": self.cosmo["bias"]["b4"], "cct": self.cosmo["bias"]["cct"], "cr1": self.cosmo["bias"]["cr1"], "cr2": 0., "ce0": 0., "ce1": 0., "ce2": 0., "dct": self.cosmo["bias"]["dct"], "dr1": self.cosmo["bias"]["dr1"], "dr2": 0. }
-    #     #         elif self.config["multipole"] == 3:
-    #     #             if len(self.cosmo["bias"]) is not 10: raise Exception("Please specify a dict of 10 biases: \{ \'b1\', \'b2\', \'b3\', \'b4\', \'cct\', \'cr1\', \'cr2\' + matter counterterms: \'dct\', \'dr1\', \'dr2\' \}. ")
-    #     #             else: self.bias = { "b1": self.cosmo["bias"]["b1"], "b2": self.cosmo["bias"]["b2"], "b3": self.cosmo["bias"]["b3"], "b4": self.cosmo["bias"]["b4"], "cct": self.cosmo["bias"]["cct"], "cr1": self.cosmo["bias"]["cr1"], "cr2": self.cosmo["bias"]["cr2"], "ce0": 0., "ce1": 0., "ce2": 0., "dct": self.cosmo["bias"]["dct"], "dr1": self.cosmo["bias"]["dr1"], "dr2": self.cosmo["bias"]["dr2"] }
-    #     #     else:
-    #     #         pass # to code up
-
-    #     elif "m" in self.config["output"]:
-    #         if self.config["multipole"] == 0:
-    #             if len(self.cosmo["bias"]) is not 1:
-    #                 raise Exception("Please specify a dict of 1 bias: \{ 'cct' \}. ")
-    #             else:
-    #                 self.bias = {
-    #                     "b1": 1.0,
-    #                     "b2": 1.0,
-    #                     "b3": 1.0,
-    #                     "b4": 0.0,
-    #                     "cct": self.cosmo["bias"]["cct"],
-    #                     "cr1": 0.0,
-    #                     "cr2": 0.0,
-    #                     "ce0": 0.0,
-    #                     "ce1": 0.0,
-    #                     "ce2": 0.0,
-    #                 }
-    #         elif self.config["multipole"] == 2:
-    #             if len(self.cosmo["bias"]) is not 2:
-    #                 raise Exception("Please specify a dict of 2 biases: \{ 'cct', 'cr1' \}. ")
-    #             else:
-    #                 self.bias = {
-    #                     "b1": 1.0,
-    #                     "b2": 1.0,
-    #                     "b3": 1.0,
-    #                     "b4": 0.0,
-    #                     "cct": self.cosmo["bias"]["cct"],
-    #                     "cr1": self.cosmo["bias"]["cr1"],
-    #                     "cr2": 0.0,
-    #                     "ce0": 0.0,
-    #                     "ce1": 0.0,
-    #                     "ce2": 0.0,
-    #                 }
-    #         elif self.config["multipole"] == 3:
-    #             if len(self.cosmo["bias"]) is not 3:
-    #                 raise Exception("Please specify a dict of 3 biases: \{ 'cct', 'cr1', 'cr2' \}. ")
-    #             else:
-    #                 self.bias = {
-    #                     "b1": 1.0,
-    #                     "b2": 1.0,
-    #                     "b3": 1.0,
-    #                     "b4": 0.0,
-    #                     "cct": self.cosmo["bias"]["cct"],
-    #                     "cr1": self.cosmo["bias"]["cr1"],
-    #                     "cr2": self.cosmo["bias"]["cr2"],
-    #                     "ce0": 0.0,
-    #                     "ce1": 0.0,
-    #                     "ce2": 0.0,
-    #                 }
-
-    #     else:
-
-    #         Nextra = 0
-    #         if self.config["with_nnlo_counterterm"]:
-    #             Nextra += self.config["multipole"]
-    #         if self.config["with_nnlo_higher_derivative"]:
-    #             Nextra += self.config["multipole"]
-    #         if self.config["with_tidal_alignments"]:
-    #             Nextra += 1
-
-    #         if not self.config["with_stoch"]:
-    #             if self.config["multipole"] == 0:
-    #                 if len(self.cosmo["bias"]) is not 5 + Nextra:
-    #                     raise Exception("Please specify a dict of 5 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct' \}. ")
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": 0.0,
-    #                         "cr2": 0.0,
-    #                         "ce0": 0.0,
-    #                         "ce1": 0.0,
-    #                         "ce2": 0.0,
-    #                     }
-    #             elif self.config["multipole"] == 2:
-    #                 if len(self.cosmo["bias"]) is not 6 + Nextra:
-    #                     raise Exception(
-    #                         "Please specify a dict of 6 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1' \}. "
-    #                     )
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": self.cosmo["bias"]["cr1"],
-    #                         "cr2": 0.0,
-    #                         "ce0": 0.0,
-    #                         "ce1": 0.0,
-    #                         "ce2": 0.0,
-    #                     }
-    #             elif self.config["multipole"] == 3:
-    #                 if len(self.cosmo["bias"]) is not 7 + Nextra:
-    #                     raise Exception(
-    #                         "Please specify a dict of 7 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'cr2' \}. "
-    #                     )
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": self.cosmo["bias"]["cr1"],
-    #                         "cr2": self.cosmo["bias"]["cr2"],
-    #                         "ce0": 0.0,
-    #                         "ce1": 0.0,
-    #                         "ce2": 0.0,
-    #                     }
-    #         else:
-    #             if self.config["multipole"] == 0:
-    #                 if len(self.cosmo["bias"]) is not 6 + Nextra:
-    #                     raise Exception(
-    #                         "Please specify a dict of 6 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'ce0' \}. "
-    #                     )
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": 0.0,
-    #                         "cr2": 0.0,
-    #                         "ce0": self.cosmo["bias"]["ce0"],
-    #                         "ce1": 0.0,
-    #                         "ce2": 0.0,
-    #                     }
-    #             elif self.config["multipole"] == 2:
-    #                 if len(self.cosmo["bias"]) is not 9 + Nextra:
-    #                     raise Exception(
-    #                         "Please specify a dict of 9 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'ce0', 'ce1', 'ce2'  \}. "
-    #                     )
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": self.cosmo["bias"]["cr1"],
-    #                         "cr2": 0.0,
-    #                         "ce0": self.cosmo["bias"]["ce0"],
-    #                         "ce1": self.cosmo["bias"]["ce1"],
-    #                         "ce2": self.cosmo["bias"]["ce2"],
-    #                     }
-    #             elif self.config["multipole"] == 3:
-    #                 if len(self.cosmo["bias"]) is not 10 + Nextra:
-    #                     raise Exception(
-    #                         "Please specify a dict of 10 biases: \{ 'b1', 'b2', 'b3', 'b4', 'cct', 'cr1', 'cr2', 'ce0', 'ce1', 'ce2' \}. "
-    #                     )
-    #                 else:
-    #                     self.bias = {
-    #                         "b1": self.cosmo["bias"]["b1"],
-    #                         "b2": self.cosmo["bias"]["b2"],
-    #                         "b3": self.cosmo["bias"]["b3"],
-    #                         "b4": self.cosmo["bias"]["b4"],
-    #                         "cct": self.cosmo["bias"]["cct"],
-    #                         "cr1": self.cosmo["bias"]["cr1"],
-    #                         "cr2": self.cosmo["bias"]["cr2"],
-    #                         "ce0": self.cosmo["bias"]["ce0"],
-    #                         "ce1": self.cosmo["bias"]["ce1"],
-    #                         "ce2": self.cosmo["bias"]["ce2"],
-    #                     }
-
-    #         if self.config["with_nnlo_counterterm"]:
-    #             try:
-    #                 self.bias["cnnlo_l0"] = self.cosmo["bias"]["cnnlo_l0"]
-    #                 self.bias["cnnlo_l2"] = self.cosmo["bias"]["cnnlo_l2"]
-    #                 if self.config["multipole"] == 3:
-    #                     self.bias["cnnlo_l4"] = self.cosmo["bias"]["cnnlo_l4"]
-    #             except:
-    #                 raise Exception(
-    #                     "Please specify the next-to-next-to-leading counterterm coefficients 'cnnlo_l0', 'cnnlo_l2', ...  "
-    #                 )
-
-    #         if self.config["with_nnlo_higher_derivative"]:
-    #             try:
-    #                 self.bias["bnnlo_l0"] = self.cosmo["bias"]["bnnlo_l0"]
-    #                 self.bias["bnnlo_l2"] = self.cosmo["bias"]["bnnlo_l2"]
-    #                 if self.config["multipole"] == 3:
-    #                     self.bias["bnnlo_l4"] = self.cosmo["bias"]["bnnlo_l4"]
-    #             except:
-    #                 raise Exception(
-    #                     "Please specify the next-to-next-to-leading higher-derivative biases 'bnnlo_l0', 'bnnlo_l2', ...  "
-    #                 )
-
-    #         if self.config["with_tidal_alignments"]:
-    #             try:
-    #                 self.bias["bq"] = self.cosmo["bias"]["bq"]
-    #             except:
-    #                 raise Exception("Please specify the tidal alignments bias 'bq'.  ")
-    #         else:
-    #             self.bias["bq"] = 0.0  # enforced for marg
     
     def __is_bias_conflict(self, bias=None):
         if bias is not None: self.cosmo["bias"] = bias
@@ -1659,161 +1831,161 @@ class Correlator(object):
 
         # if self.config["with_quintessence"]: self.config["with_exact_time"] = True
 
-    def setcosmo(self, cosmo_dict, module="class"):
+    # def setcosmo(self, cosmo_dict, module="class"):
 
-        if module is "class":
+    #     if module is "class":
 
-            from classy import Class
+    #         from classy import Class
 
-            # Not sure this is useful: does class read z_max_pk?
-            if self.config["skycut"] == 1:
-                if self.config["with_redshift_bin"]:
-                    zmax = max(self.config["zz"])
-                else:
-                    zmax = self.config["z"]
-            elif self.config["skycut"] > 1:
-                if self.config["with_redshift_bin"]:
-                    maxbin = np.argmax(self.config["z"])
-                    zmax = max(self.config["zz"][maxbin])
-                else:
-                    zmax = max(self.config["z"])
+    #         # Not sure this is useful: does class read z_max_pk?
+    #         if self.config["skycut"] == 1:
+    #             if self.config["with_redshift_bin"]:
+    #                 zmax = max(self.config["zz"])
+    #             else:
+    #                 zmax = self.config["z"]
+    #         elif self.config["skycut"] > 1:
+    #             if self.config["with_redshift_bin"]:
+    #                 maxbin = np.argmax(self.config["z"])
+    #                 zmax = max(self.config["zz"][maxbin])
+    #             else:
+    #                 zmax = max(self.config["z"])
 
-            cosmo_dict_local = cosmo_dict.copy()
-            if self.config["with_bias"]:
-                del cosmo_dict_local["bias"]  # Class does not like dictionary with keys other than the ones it reads...
+    #         cosmo_dict_local = cosmo_dict.copy()
+    #         if self.config["with_bias"]:
+    #             del cosmo_dict_local["bias"]  # Class does not like dictionary with keys other than the ones it reads...
 
-            M = Class()
-            M.set(cosmo_dict_local)
-            M.set({"output": "mPk", "P_k_max_h/Mpc": 100.0, "z_max_pk": zmax})
-            M.compute()
+    #         M = Class()
+    #         M.set(cosmo_dict_local)
+    #         M.set({"output": "mPk", "P_k_max_h/Mpc": 100.0, "z_max_pk": zmax})
+    #         M.compute()
 
-            cosmo = {}
+    #         cosmo = {}
 
-            if self.config["with_bias"]:
-                try:
-                    cosmo["bias"] = cosmo_dict["bias"]
-                except:
-                    print("Please specify 'bias'.")
-                    raise
+    #         if self.config["with_bias"]:
+    #             try:
+    #                 cosmo["bias"] = cosmo_dict["bias"]
+    #             except:
+    #                 print("Please specify 'bias'.")
+    #                 raise
 
-            if self.config["skycut"] == 1:
-                zfid = self.config["z"]
-            elif self.config["skycut"] > 1:
-                zfid = self.config["z"][self.config["skycut"] // 2]
+    #         if self.config["skycut"] == 1:
+    #             zfid = self.config["z"]
+    #         elif self.config["skycut"] > 1:
+    #             zfid = self.config["z"][self.config["skycut"] // 2]
 
-            cosmo["k11"] = np.logspace(-5, 100.0, 2000)  # k in h/Mpc
-            cosmo["P11"] = np.array([M.pk_lin(k * M.h(), zfid) * M.h() ** 3 for k in cosmo["k11"]])  # P(k) in (Mpc/h)**3
+    #         cosmo["k11"] = np.logspace(-5, 2.0, 2000)  # k in h/Mpc
+    #         cosmo["P11"] = np.array([M.pk_lin(k * M.h(), zfid) * M.h() ** 3 for k in cosmo["k11"]])  # P(k) in (Mpc/h)**3
 
-            if self.config["skycut"] == 1:
-                if self.config["multipole"] is not 0:
-                    cosmo["f"] = M.scale_independent_growth_factor_f(self.config["z"])
-                if self.config["with_nonequal_time"]:
-                    cosmo["D"] = M.scale_independent_growth_factor(self.config["z"])
-                    cosmo["D1"] = M.scale_independent_growth_factor(self.config["z1"])
-                    cosmo["D2"] = M.scale_independent_growth_factor(self.config["z2"])
-                    cosmo["f1"] = M.scale_independent_growth_factor_f(self.config["z1"])
-                    cosmo["f2"] = M.scale_independent_growth_factor_f(self.config["z2"])
-                if self.config["with_exact_time"] or self.config["with_quintessence"]:
-                    cosmo["z"] = self.config["z"]
-                    cosmo["Omega0_m"] = M.Omega0_m()
-                    try:
-                        cosmo["w0_fld"] = cosmo_dict["w0_fld"]
-                    except:
-                        pass
-                if self.config["with_AP"]:
-                    cosmo["DA"] = M.angular_distance(self.config["z"]) * M.Hubble(0.0)
-                    cosmo["H"] = M.Hubble(self.config["z"]) / M.Hubble(0.0)
+    #         if self.config["skycut"] == 1:
+    #             if self.config["multipole"] is not 0:
+    #                 cosmo["f"] = M.scale_independent_growth_factor_f(self.config["z"])
+    #             if self.config["with_nonequal_time"]:
+    #                 cosmo["D"] = M.scale_independent_growth_factor(self.config["z"])
+    #                 cosmo["D1"] = M.scale_independent_growth_factor(self.config["z1"])
+    #                 cosmo["D2"] = M.scale_independent_growth_factor(self.config["z2"])
+    #                 cosmo["f1"] = M.scale_independent_growth_factor_f(self.config["z1"])
+    #                 cosmo["f2"] = M.scale_independent_growth_factor_f(self.config["z2"])
+    #             if self.config["with_exact_time"] or self.config["with_quintessence"]:
+    #                 cosmo["z"] = self.config["z"]
+    #                 cosmo["Omega0_m"] = M.Omega0_m()
+    #                 try:
+    #                     cosmo["w0_fld"] = cosmo_dict["w0_fld"]
+    #                 except:
+    #                     pass
+    #             if self.config["with_AP"]:
+    #                 cosmo["DA"] = M.angular_distance(self.config["z"]) * M.Hubble(0.0)
+    #                 cosmo["H"] = M.Hubble(self.config["z"]) / M.Hubble(0.0)
 
-            elif self.config["skycut"] > 1:
-                if self.config["multipole"] is not 0:
-                    cosmo["f"] = np.array([M.scale_independent_growth_factor_f(z) for z in self.config["z"]])
-                cosmo["D"] = np.array([M.scale_independent_growth_factor(z) for z in self.config["z"]])
-                if self.config["with_AP"]:
-                    cosmo["DA"] = np.array([M.angular_distance(z) * M.Hubble(0.0) for z in self.config["z"]])
-                    cosmo["H"] = np.array([M.Hubble(z) / M.Hubble(0.0) for z in self.config["z"]])
+    #         elif self.config["skycut"] > 1:
+    #             if self.config["multipole"] is not 0:
+    #                 cosmo["f"] = np.array([M.scale_independent_growth_factor_f(z) for z in self.config["z"]])
+    #             cosmo["D"] = np.array([M.scale_independent_growth_factor(z) for z in self.config["z"]])
+    #             if self.config["with_AP"]:
+    #                 cosmo["DA"] = np.array([M.angular_distance(z) * M.Hubble(0.0) for z in self.config["z"]])
+    #                 cosmo["H"] = np.array([M.Hubble(z) / M.Hubble(0.0) for z in self.config["z"]])
 
-            if self.config["with_redshift_bin"]:
+    #         if self.config["with_redshift_bin"]:
 
-                def comoving_distance(z):
-                    return M.angular_distance(z) * (1 + z) * M.h()
+    #             def comoving_distance(z):
+    #                 return M.angular_distance(z) * (1 + z) * M.h()
 
-                if self.config["skycut"] == 1:
-                    cosmo["D"] = M.scale_independent_growth_factor(self.config["z"])
-                    cosmo["Dz"] = np.array([M.scale_independent_growth_factor(z) for z in self.config["zz"]])
-                    cosmo["fz"] = np.array([M.scale_independent_growth_factor_f(z) for z in self.config["zz"]])
-                    cosmo["rz"] = np.array([comoving_distance(z) for z in self.config["zz"]])
+    #             if self.config["skycut"] == 1:
+    #                 cosmo["D"] = M.scale_independent_growth_factor(self.config["z"])
+    #                 cosmo["Dz"] = np.array([M.scale_independent_growth_factor(z) for z in self.config["zz"]])
+    #                 cosmo["fz"] = np.array([M.scale_independent_growth_factor_f(z) for z in self.config["zz"]])
+    #                 cosmo["rz"] = np.array([comoving_distance(z) for z in self.config["zz"]])
 
-                elif self.config["skycut"] > 1:
-                    cosmo["Dz"] = np.array(
-                        [[M.scale_independent_growth_factor(z) for z in zz] for zz in self.config["zz"]]
-                    )
-                    cosmo["fz"] = np.array(
-                        [[M.scale_independent_growth_factor_f(z) for z in zz] for zz in self.config["zz"]]
-                    )
-                    cosmo["rz"] = np.array([[comoving_distance(z) for z in zz] for zz in self.config["zz"]])
+    #             elif self.config["skycut"] > 1:
+    #                 cosmo["Dz"] = np.array(
+    #                     [[M.scale_independent_growth_factor(z) for z in zz] for zz in self.config["zz"]]
+    #                 )
+    #                 cosmo["fz"] = np.array(
+    #                     [[M.scale_independent_growth_factor_f(z) for z in zz] for zz in self.config["zz"]]
+    #                 )
+    #                 cosmo["rz"] = np.array([[comoving_distance(z) for z in zz] for zz in self.config["zz"]])
 
-            if self.config["with_quintessence"]:
-                # starting deep inside matter domination and evolving to the total adiabatic linear power spectrum.
-                # This does not work in the general case, e.g. with massive neutrinos (okish for minimal mass though)
-                # This does not work for multi skycuts nor 'with_redshift_bin': True. # eventually to code up
-                zm = 5.0  # z in matter domination
+    #         if self.config["with_quintessence"]:
+    #             # starting deep inside matter domination and evolving to the total adiabatic linear power spectrum.
+    #             # This does not work in the general case, e.g. with massive neutrinos (okish for minimal mass though)
+    #             # This does not work for multi skycuts nor 'with_redshift_bin': True. # eventually to code up
+    #             zm = 5.0  # z in matter domination
 
-                def scale_factor(z):
-                    return 1 / (1.0 + z)
+    #             def scale_factor(z):
+    #                 return 1 / (1.0 + z)
 
-                Omega0_m = cosmo["Omega0_m"]
-                w = cosmo["w0_fld"]
-                GF = GreenFunction(Omega0_m, w=w, quintessence=True)
-                Dq = GF.D(scale_factor(zfid)) / GF.D(scale_factor(zm))
-                Dm = M.scale_independent_growth_factor(zfid) / M.scale_independent_growth_factor(zm)
-                cosmo["P11"] *= (
-                    Dq ** 2
-                    / Dm ** 2
-                    * (1 + (1 + w) / (1.0 - 3 * w) * (1 - Omega0_m) / Omega0_m * (1 + zm) ** (3 * w)) ** 2
-                )  # 1611.07966 eq. (4.15)
-                cosmo["f"] = GF.fplus(1 / (1.0 + cosmo["z"]))
+    #             Omega0_m = cosmo["Omega0_m"]
+    #             w = cosmo["w0_fld"]
+    #             GF = GreenFunction(Omega0_m, w=w, quintessence=True)
+    #             Dq = GF.D(scale_factor(zfid)) / GF.D(scale_factor(zm))
+    #             Dm = M.scale_independent_growth_factor(zfid) / M.scale_independent_growth_factor(zm)
+    #             cosmo["P11"] *= (
+    #                 Dq ** 2
+    #                 / Dm ** 2
+    #                 * (1 + (1 + w) / (1.0 - 3 * w) * (1 - Omega0_m) / Omega0_m * (1 + zm) ** (3 * w)) ** 2
+    #             )  # 1611.07966 eq. (4.15)
+    #             cosmo["f"] = GF.fplus(1 / (1.0 + cosmo["z"]))
 
-            if self.config["with_nnlo_counterterm"] or self.config["with_nnlo_higher_derivative"]:
-                EH_dict = {
-                    "Omega0_b": M.Omega_b(),
-                    "Omega0_m": M.Omega0_m(),
-                    "h": M.h(),
-                    "A_s": M.get_current_derived_parameters(["A_s"]),
-                    "n_s": M.n_s(),
-                    "T_cmb": M.T_cmb(),
-                    "D": M.scale_independent_growth_factor(self.config["z"]),
-                }
-                cosmo["EH"] = EH_dict
-            def get_smooth_wiggle_resc(kk, pk, alpha_rs=1.): # k [h/Mpc], pk [(Mpc/h)**3]
-                from scipy.fftpack import dst
-                kp = np.linspace(1.e-7, 7, 2**16)   # 1/Mpc
-                ilogpk = interp1d(np.log(kk * M.h()), np.log(pk / M.h()**3), fill_value="extrapolate") # Mpc**3
-                lnkpk = np.log(kp) + ilogpk(np.log(kp))
-                harmonics = dst(lnkpk, type=2, norm='ortho')
-                odd, even = harmonics[::2], harmonics[1::2]
-                nn = np.arange(0, odd.shape[0], 1)
-                nobao = np.delete(nn, np.arange(120, 240,1))
-                smooth_odd = interp1d(nn, odd, kind='cubic')(nobao)
-                smooth_even = interp1d(nn, even, kind='cubic')(nobao)
-                smooth_odd = interp1d(nobao, smooth_odd, kind='cubic')(nn)
-                smooth_even = interp1d(nobao, smooth_even, kind='cubic')(nn)
-                smooth_harmonics =  np.array([[o, e] for (o, e) in zip(smooth_odd, smooth_even)]).reshape(-1)
-                smooth_lnkpk = dst(smooth_harmonics, type=3, norm='ortho')
-                smooth_pk = np.exp(smooth_lnkpk) / kp
-                wiggle_pk = np.exp(ilogpk(np.log(kp))) - smooth_pk
-                spk = interp1d(kp, smooth_pk, bounds_error=False)(kk * M.h()) * M.h()**3 # (Mpc/h)**3
-                wpk_resc = interp1d(kp, wiggle_pk, bounds_error=False)(alpha_rs * kk * M.h()) * M.h()**3 # (Mpc/h)**3 # wiggle rescaling
-                kmask = np.where(kk < 1.02)[0]
-                return kk[kmask], spk[kmask], pk[kmask] #spk[kmask]+wpk_resc[kmask]
-            # print(cosmo["Omega0_m"], cosmo["z"])
-            return cosmo
+    #         if self.config["with_nnlo_counterterm"] or self.config["with_nnlo_higher_derivative"]:
+    #             EH_dict = {
+    #                 "Omega0_b": M.Omega_b(),
+    #                 "Omega0_m": M.Omega0_m(),
+    #                 "h": M.h(),
+    #                 "A_s": M.get_current_derived_parameters(["A_s"]),
+    #                 "n_s": M.n_s(),
+    #                 "T_cmb": M.T_cmb(),
+    #                 "D": M.scale_independent_growth_factor(self.config["z"]),
+    #             }
+    #             cosmo["EH"] = EH_dict
+    #         def get_smooth_wiggle_resc(kk, pk, alpha_rs=1.): # k [h/Mpc], pk [(Mpc/h)**3]
+    #             from scipy.fftpack import dst
+    #             kp = np.linspace(1.e-7, 7, 2**16)   # 1/Mpc
+    #             ilogpk = interp1d(np.log(kk * M.h()), np.log(pk / M.h()**3), fill_value="extrapolate") # Mpc**3
+    #             lnkpk = np.log(kp) + ilogpk(np.log(kp))
+    #             harmonics = dst(lnkpk, type=2, norm='ortho')
+    #             odd, even = harmonics[::2], harmonics[1::2]
+    #             nn = np.arange(0, odd.shape[0], 1)
+    #             nobao = np.delete(nn, np.arange(120, 240,1))
+    #             smooth_odd = interp1d(nn, odd, kind='cubic')(nobao)
+    #             smooth_even = interp1d(nn, even, kind='cubic')(nobao)
+    #             smooth_odd = interp1d(nobao, smooth_odd, kind='cubic')(nn)
+    #             smooth_even = interp1d(nobao, smooth_even, kind='cubic')(nn)
+    #             smooth_harmonics =  np.array([[o, e] for (o, e) in zip(smooth_odd, smooth_even)]).reshape(-1)
+    #             smooth_lnkpk = dst(smooth_harmonics, type=3, norm='ortho')
+    #             smooth_pk = np.exp(smooth_lnkpk) / kp
+    #             wiggle_pk = np.exp(ilogpk(np.log(kp))) - smooth_pk
+    #             spk = interp1d(kp, smooth_pk, bounds_error=False)(kk * M.h()) * M.h()**3 # (Mpc/h)**3
+    #             wpk_resc = interp1d(kp, wiggle_pk, bounds_error=False)(alpha_rs * kk * M.h()) * M.h()**3 # (Mpc/h)**3 # wiggle rescaling
+    #             kmask = np.where(kk < 1.02)[0]
+    #             return kk[kmask], spk[kmask], pk[kmask] #spk[kmask]+wpk_resc[kmask]
+    #         # print(cosmo["Omega0_m"], cosmo["z"])
+    #         return cosmo
         
-        # wiggle-no-wiggle split # algo: 1003.3999; details: 2004.10607
+    #     # wiggle-no-wiggle split # algo: 1003.3999; details: 2004.10607
         
     
-        if self.c["with_nnlo_counterterm"]: cosmo["kk"], cosmo["Psmooth"], cosmo["pk_lin"] = get_smooth_wiggle_resc(cosmo["kk"], cosmo["pk_lin"])
+    #     if self.config["with_nnlo_counterterm"]: cosmo["kk"], cosmo["Psmooth"], cosmo["pk_lin"] = get_smooth_wiggle_resc(cosmo["kk"], cosmo["pk_lin"])
     
-        return cosmo
+    #     return cosmo
         
     def setPS_SF(self, init=False, factor_m=None):
         
@@ -2120,6 +2292,91 @@ class Correlator(object):
                 self.birds[redindex].Pctl = self.Pctl_interp(factor_m)
                 self.birds[redindex].Ploopl = self.Ploopl_interp(factor_m)
                 self.resum.Ps(self.birds[redindex], makeIR=False, makeQ=True, setPs=True, init=False)
+                
+    def set_cosmo(self, cosmo_dict, module='class', engine=None):
+
+        cosmo = {}
+
+        if module == 'class':
+
+            log10kmax = 0
+            if self.config["with_nnlo_counterterm"]: log10kmax = 1 # slower, but required for the wiggle-no-wiggle split scheme
+
+            if not engine:
+                from classy import Class
+                cosmo_dict_local = cosmo_dict.copy()
+                if self.config["with_bias"] and "bias" in cosmo_dict: del cosmo_dict_local["bias"] # remove to not pass it to classy that otherwise complains
+                if not self.config["with_time"] and "A" in cosmo_dict: del cosmo_dict_local["A"] # same as above
+                if self.config["with_redshift_bin"]: zmax = max(self.config["redshift_bin_zz"])
+                else: zmax = self.config["z"]
+                M = Class()
+                M.set(cosmo_dict_local)
+                M.set({'output': 'mPk', 'P_k_max_h/Mpc': 10.**log10kmax, 'z_max_pk': zmax })
+                M.compute()
+            else: M = engine
+
+            cosmo["kk"] = np.logspace(-5, log10kmax, 200)  # k in h/Mpc
+            cosmo["pk_lin"] = np.array([M.pk_lin(k*M.h(), self.config["z"])*M.h()**3 for k in cosmo["kk"]]) # P(k) in (Mpc/h)**3
+
+            if self.config["multipole"] > 0: cosmo["f"] = M.scale_independent_growth_factor_f(self.config["z"])
+            if not self.config["with_time"]: cosmo["D"] = M.scale_independent_growth_factor(self.config["z"])
+            if self.config["with_nonequal_time"]:
+                cosmo["D1"] = M.scale_independent_growth_factor(self.config["z1"])
+                cosmo["D2"] = M.scale_independent_growth_factor(self.config["z2"])
+                cosmo["f1"] = M.scale_independent_growth_factor_f(self.config["z1"])
+                cosmo["f2"] = M.scale_independent_growth_factor_f(self.config["z2"])
+            if self.config["with_exact_time"] or self.config["with_quintessence"]:
+                cosmo["z"] = self.config["z"]
+                cosmo["Omega0_m"] = M.Omega0_m()
+                if "w0_fld" in cosmo_dict: cosmo["w0_fld"] = cosmo_dict["w0_fld"]
+            if self.config["with_AP"]:
+                cosmo["H"], cosmo["DA"] = M.Hubble(self.config["z"]) / M.Hubble(0.), M.angular_distance(self.config["z"]) * M.Hubble(0.)
+
+            if self.config["with_redshift_bin"]:
+                def comoving_distance(z): return M.angular_distance(z) * (1+z) * M.h()
+                cosmo["Dz"] = np.array([M.scale_independent_growth_factor(z) for z in self.config["redshift_bin_zz"]])
+                cosmo["fz"] = np.array([M.scale_independent_growth_factor_f(z) for z in self.config["redshift_bin_zz"]])
+                cosmo["rz"] = np.array([comoving_distance(z) for z in self.config["redshift_bin_zz"]])
+
+            if self.config["with_quintessence"]:
+                # starting deep inside matter domination and evolving to the total adiabatic linear power spectrum.
+                # This does not work in the general case, e.g. with massive neutrinos (okish for minimal mass though)
+                # This does not work for 'with_redshift_bin': True. # eventually to code up
+                zm = 5. # z in matter domination
+                def scale_factor(z): return 1/(1.+z)
+                Omega0_m = cosmo["Omega0_m"]
+                w = cosmo["w0_fld"]
+                GF = GreenFunction(Omega0_m, w=w, quintessence=True)
+                Dq = GF.D(scale_factor(zfid)) / GF.D(scale_factor(zm))
+                Dm = M.scale_independent_growth_factor(self.config["z"]) / M.scale_independent_growth_factor(zm)
+                cosmo["pk_lin"] *= Dq**2 / Dm**2 * ( 1 + (1+w)/(1.-3*w) * (1-Omega0_m)/Omega0_m * (1+zm)**(3*w) )**2 # 1611.07966 eq. (4.15)
+                cosmo["f"] = GF.fplus(1/(1.+self.config["z"]))
+
+            # wiggle-no-wiggle split # algo: 1003.3999; details: 2004.10607
+            def get_smooth_wiggle_resc(kk, pk, alpha_rs=1.): # k [h/Mpc], pk [(Mpc/h)**3]
+                kp = np.linspace(1.e-7, 7, 2**16)   # 1/Mpc
+                ilogpk = interp1d(np.log(kk * M.h()), np.log(pk / M.h()**3), fill_value="extrapolate") # Mpc**3
+                lnkpk = np.log(kp) + ilogpk(np.log(kp))
+                harmonics = dst(lnkpk, type=2, norm='ortho')
+                odd, even = harmonics[::2], harmonics[1::2]
+                nn = np.arange(0, odd.shape[0], 1)
+                nobao = np.delete(nn, np.arange(120, 240,1))
+                smooth_odd = interp1d(nn, odd, kind='cubic')(nobao)
+                smooth_even = interp1d(nn, even, kind='cubic')(nobao)
+                smooth_odd = interp1d(nobao, smooth_odd, kind='cubic')(nn)
+                smooth_even = interp1d(nobao, smooth_even, kind='cubic')(nn)
+                smooth_harmonics =  np.array([[o, e] for (o, e) in zip(smooth_odd, smooth_even)]).reshape(-1)
+                smooth_lnkpk = dst(smooth_harmonics, type=3, norm='ortho')
+                smooth_pk = np.exp(smooth_lnkpk) / kp
+                wiggle_pk = np.exp(ilogpk(np.log(kp))) - smooth_pk
+                spk = interp1d(kp, smooth_pk, bounds_error=False)(kk * M.h()) * M.h()**3 # (Mpc/h)**3
+                wpk_resc = interp1d(kp, wiggle_pk, bounds_error=False)(alpha_rs * kk * M.h()) * M.h()**3 # (Mpc/h)**3 # wiggle rescaling
+                kmask = np.where(kk < 1.02)[0]
+                return kk[kmask], spk[kmask], pk[kmask] #spk[kmask]+wpk_resc[kmask]
+
+            if self.config["with_nnlo_counterterm"]: cosmo["kk"], cosmo["Psmooth"], cosmo["pk_lin"] = get_smooth_wiggle_resc(cosmo["kk"], cosmo["pk_lin"])
+
+            return cosmo
     
 
 

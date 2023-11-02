@@ -217,11 +217,16 @@ class Resum(object):
         for l in range(Nl):
             self.M[l] = 8.0 * pi ** 3 * MPC(2 * l, -0.5 * self.fft.Pow)
 
+    # def IRn(self, XpYpC, window=None):
+    #     """ Compute the spherical Bessel transform in the IR correction of order n given [XY]^n """
+    #     Coef = self.fft.Coef(self.sr, XpYpC, extrap="padding", window=window)
+    #     CoefkPow = np.einsum("n,nk->nk", Coef, self.kPow)
+    #     return np.real(np.einsum("nk,ln->lk", CoefkPow, self.M[:self.co.Nl]))
     def IRn(self, XpYpC, window=None):
         """ Compute the spherical Bessel transform in the IR correction of order n given [XY]^n """
-        Coef = self.fft.Coef(self.sr, XpYpC, extrap="padding", window=window)
-        CoefkPow = np.einsum("n,nk->nk", Coef, self.kPow)
-        return np.real(np.einsum("nk,ln->lk", CoefkPow, self.M[:self.co.Nl]))
+        Coef = self.fft.Coef(self.sr, XpYpC, extrap='padding', window=window)
+        CoefkPow = np.einsum('n,nk->nk', Coef, self.kPow)
+        return np.real(np.einsum('nk,ln->lk', CoefkPow, self.M[:self.co.Na]))
 
         # output = np.real(np.einsum("nk,ln->lk", CoefkPow, self.M[:self.co.Na]))
         # knew = np.linspace(self.klow, self.co.kmax, 1001)
@@ -261,20 +266,9 @@ class Resum(object):
         # if len(f) == 1:
         # Q = np.empty(shape=(2, self.co.Nl, self.co.Nl, self.co.Nn))
         Q = np.zeros(shape=(2, self.co.Nl, self.co.Nl, self.co.Nn))
-        # for a in range(2):
-        #     for l in range(self.co.Nl):
-        #         for lpr in range(self.co.Nl):
-        #             for u in range(self.co.Nn):
-        #                 if self.co.NIR is 8:
-        #                     Q[a][l][lpr][u] = Qa[1 - a][2 * l][2 * lpr][u](f)
-        #                 elif self.co.NIR is 16:
-        #                     Q[a][l][lpr][u] = Qawithhex[1 - a][2 * l][2 * lpr][u](f)
-        #                 elif self.co.NIR is 20:
-        #                     Q[a][l][lpr][u] = Qawithhex20[1 - a][2 * l][2 * lpr][u](f)
-        
         for a in range(2):
-            for l in range(3):
-                for lpr in range(3):
+            for l in range(self.co.Nl):
+                for lpr in range(self.co.Nl):
                     for u in range(self.co.Nn):
                         if self.co.NIR is 8:
                             Q[a][l][lpr][u] = Qa[1 - a][2 * l][2 * lpr][u](f)
@@ -282,6 +276,17 @@ class Resum(object):
                             Q[a][l][lpr][u] = Qawithhex[1 - a][2 * l][2 * lpr][u](f)
                         elif self.co.NIR is 20:
                             Q[a][l][lpr][u] = Qawithhex20[1 - a][2 * l][2 * lpr][u](f)
+        
+        # for a in range(2):
+        #     for l in range(3):
+        #         for lpr in range(3):
+        #             for u in range(self.co.Nn):
+        #                 if self.co.NIR is 8:
+        #                     Q[a][l][lpr][u] = Qa[1 - a][2 * l][2 * lpr][u](f)
+        #                 elif self.co.NIR is 16:
+        #                     Q[a][l][lpr][u] = Qawithhex[1 - a][2 * l][2 * lpr][u](f)
+        #                 elif self.co.NIR is 20:
+        #                     Q[a][l][lpr][u] = Qawithhex20[1 - a][2 * l][2 * lpr][u](f)
     
         # else:
         #     Q = np.zeros(shape=(len(f), 2, self.co.Nl, self.co.Nl, self.co.Nn))
@@ -410,6 +415,7 @@ class Resum(object):
                     for j, xy in enumerate(XpYp):
                         IRcorrUnsorted = np.real((-1j) ** (2 * l)) * self.k2p[j] * self.IRn(xy * cl, window=window)
                         for v in range(self.co.Na):
+                            # print(self.co.Na, v, j * self.co.Na + v, self.co.Nn, np.shape(IRcorrUnsorted))
                             bird.IRPs11[l, j * self.co.Na + v, self.Nlow :] = IRcorrUnsorted[v]
                 for l, cl in enumerate(self.extractBAO(bird.Cct)):
                     for j, xy in enumerate(XpYp):
@@ -442,3 +448,30 @@ class Resum(object):
                                 IRPsloop[l, i, j * self.co.Na + v, self.Nlow :] = IRcorrUnsorted[v]
                                 
                 return IRPs11, IRPsct, IRPsloop
+
+    # def IRPs(self, bird, window=None):
+    #    """ This is the main method of the class. Compute the IR corrections in Fourier space. """
+
+    #    XpYp = self.setXpYp(bird)
+
+    #    if bird.with_bias:
+    #        for a, cf in enumerate(self.extractBAO(bird.Cf[:2])): # linear, loop (but not NNLO)
+    #            for l, cl in enumerate(cf):
+    #                for j, xy in enumerate(XpYp):
+    #                    IRcorrUnsorted = np.real((-1j)**(2*l)) * self.k2p[j] * self.IRn(xy * cl, window=window)
+    #                    for v in range(self.co.Na): bird.IRPs[a, l, j*self.co.Na + v, self.Nlow:] = IRcorrUnsorted[v]
+
+    #    else:
+    #        for l, cl in enumerate(self.extractBAO(bird.C11)):
+    #            for j, xy in enumerate(XpYp):
+    #                IRcorrUnsorted = np.real((-1j)**(2*l)) * self.k2p[j] * self.IRn(xy * cl, window=window)
+    #                for v in range(self.co.Na): bird.IRPs11[l, j*self.co.Na + v, self.Nlow:] = IRcorrUnsorted[v]
+    #        for l, cl in enumerate(self.extractBAO(bird.Cct)):
+    #            for j, xy in enumerate(XpYp):
+    #                IRcorrUnsorted = np.real((-1j)**(2*l)) * self.k2p[j] * self.IRn(xy * cl, window=window)
+    #                for v in range(self.co.Na): bird.IRPsct[l, j*self.co.Na + v, self.Nlow:] = IRcorrUnsorted[v]
+    #        for l, cl in enumerate(self.extractBAO(bird.Cloopl)):
+    #            for i, cli in enumerate(cl):
+    #                for j, xy in enumerate(XpYp):
+    #                    IRcorrUnsorted = np.real((-1j)**(2*l)) * self.k2p[j] * self.IRn(xy * cli, window=window)
+    #                    for v in range(self.co.Na): bird.IRPsloop[l, i, j*self.co.Na + v, self.Nlow:] = IRcorrUnsorted[v]
